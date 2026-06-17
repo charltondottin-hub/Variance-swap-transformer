@@ -29,7 +29,7 @@ def fit_har(features: pd.DataFrame, target: pd.Series) -> HARFit:
     y = target.loc[common]
 
     X_const = sm.add_constant(X)
-    model = sm.OLS(y, X_const).fit()
+    model = sm.OLS(y, X_const, missing='drop').fit()
 
     return HARFit(
         coefficients=model.params,

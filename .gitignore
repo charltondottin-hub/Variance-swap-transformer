@@ -22,3 +22,4 @@ models/checkpoints/*.pt
 
 # Notebooks
 .ipynb_checkpoints/
+.env
