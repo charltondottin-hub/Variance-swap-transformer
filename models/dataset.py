@@ -25,7 +25,10 @@ class RVDataset(Dataset):
         self.valid_indices = []
         for i in range(config.seq_len-1, len(self.features)):
             date = self.features.index[i]
-            if date in self.target.index and not pd.isna(self.target.loc[date]):
+            if date not in self.target.index:
+                continue
+            y = self.target.loc[date]
+            if pd.notna(y) and np.isfinite(y) and y > 0:
                 self.valid_indices.append(i)
 
     def __len__(self):
@@ -48,7 +51,7 @@ class FeatureScaler:
         self.std = None
     def fit(self , df: pd.DataFrame):
         self.mean = df.mean()
-        self.std = df.std()
+        self.std = df.std().replace(0, 1.0)
         return self
     
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:

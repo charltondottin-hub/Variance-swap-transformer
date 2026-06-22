@@ -33,22 +33,33 @@ def walk_forward_backtest(
     predictions = []
     actuals = []
 
-    for i in range(len(rebalance_dates) - 1):
+    # Drop the last `horizon` rows of training data so no target depends on
+    # returns from after fit_cutoff (target[t] = sum r^2 over t+1..t+horizon).
+    horizon = 21
+
+    n_segments = len(rebalance_dates) - 1
+    for i in range(n_segments):
         fit_cutoff = rebalance_dates[i]
         next_cutoff = rebalance_dates[i + 1]
+        is_last = i == n_segments - 1
 
         if config.expanding:
-            train_X = features.loc[train_start:fit_cutoff]
-            train_y = target.loc[:fit_cutoff]
+            train_X = features.loc[train_start:fit_cutoff].iloc[:-horizon]
+            train_y = target.loc[:fit_cutoff].iloc[:-horizon]
         else:
-            
             rolling_start = fit_cutoff - pd.tseries.offsets.BDay(window_size)
-            train_X = features.loc[rolling_start:fit_cutoff]
-            train_y = target.loc[rolling_start:fit_cutoff]
+            train_X = features.loc[rolling_start:fit_cutoff].iloc[:-horizon]
+            train_y = target.loc[rolling_start:fit_cutoff].iloc[:-horizon]
 
         fit = fit_fn(train_X, train_y)
 
-        forecast_X = features.loc[fit_cutoff:next_cutoff]
+        # Each segment owns [fit_cutoff, next_cutoff); the final segment closes
+        # the interval to include test_end. Prevents boundary duplication.
+        if is_last:
+            mask = (features.index >= fit_cutoff) & (features.index <= next_cutoff)
+        else:
+            mask = (features.index >= fit_cutoff) & (features.index < next_cutoff)
+        forecast_X = features.loc[mask]
         if forecast_X.empty:
             continue
         preds = predict_fn(fit, forecast_X)
