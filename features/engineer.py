@@ -26,12 +26,14 @@ def build_features(data: dict) -> pd.DataFrame:
 
     df = pd.DataFrame(index=rv_daily.index)
     df['log_rv'] = np.log(rv_daily)
+    df['log_rv_5d']  = np.log(rv_daily.rolling(5).mean())   # NEW: log of HAR's rv_w
+    df['log_rv_22d'] = np.log(rv_daily.rolling(22).mean())  # NEW: log of HAR's rv_m
     df['log_vix'] = np.log(data['vix']['Close'] /100)
-    df['term_3m'] = np.log(data['vix_3m']['Close'] / data['vix']['Close'])
-    df['term_6m'] = np.log(data['vix_6m']['Close'] / data['vix']['Close'])
-    df['term_9d'] = np.log(data['vix_9d']['Close'] / data['vix']['Close'])
+    df['term_3m'] = np.log(data['vix3m']['Close'] / data['vix']['Close'])
+    df['term_6m'] = np.log(data['vix6m']['Close'] / data['vix']['Close'])
+    df['term_9d'] = np.log(data['vix9d']['Close'] / data['vix']['Close'])
     df['ret_1d'] = rets
     df['ret_5d'] = rets.rolling(5).sum()
     rolling_max = spx.rolling(60).max()
     df['drawdown'] = np.log(spx / rolling_max)
-    return df.dropna()
+    return df.replace([np.inf, -np.inf], np.nan).dropna()

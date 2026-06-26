@@ -4,7 +4,7 @@ import pandas as pd
 
 TRADING_DAYS = 252
 
-def daily_returns(prices: pd.series) -> pd.Series:
+def daily_returns(prices: pd.Series) -> pd.Series:
     return np.log(prices/prices.shift(1)).dropna()
 
 def realized_variance_daily(prices:pd.Series) -> pd.Series:
