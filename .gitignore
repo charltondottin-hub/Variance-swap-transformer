@@ -11,7 +11,6 @@ data/cache/
 *.parquet
 *.csv
 !data/sample/*.csv
-results/figures/*.png
 models/checkpoints/*.pt
 *.log
 
