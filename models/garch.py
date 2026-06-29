@@ -23,3 +23,17 @@ def predict_garch_horizon(fit: GARCHFit, horizon: int =21) -> float:
     horizon_var = daily_vars.sum() * (252/horizon)
     return float(horizon_var)
 
+def predict_garch_daily(params, returns: pd.Series, as_of: pd.Timestamp, horizon: int = 21) -> float:
+    """21-day-ahead annualized variance anchored at `as_of`, using fixed params.
+
+    Reuses parameters estimated at the segment's refit date and filters the GARCH
+    conditional-variance recursion forward through `as_of` (no re-estimation, no
+    look-ahead). This lets us emit a daily forecast while only refitting monthly.
+    """
+    r = returns.loc[:as_of] * 100
+    am = arch_model(r, vol='Garch', p=1, q=1, mean='Constant', dist='normal')
+    res = am.fix(params)                      # apply fixed params + filter, no fit
+    forecasts = res.forecast(horizon=horizon, reindex=False)
+    daily_vars = forecasts.variance.values[-1] / (100**2)
+    return float(daily_vars.sum() * (252 / horizon))
+
