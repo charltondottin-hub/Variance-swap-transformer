@@ -1,0 +1,11 @@
+{
+  "lr": 0.001,
+  "seq_len": 30,
+  "d_model": 32,
+  "n_heads": 2,
+  "n_layers": 1,
+  "dropout": 0.1,
+  "weight_decay": 1e-05,
+  "val_qlike": 0.4484934635961351,
+  "val_qlike_std": 0.004858378580629475
+}
