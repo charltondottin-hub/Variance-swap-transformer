@@ -37,7 +37,7 @@ parser.add_argument("--warm-start", action="store_true",
                          "retraining from scratch at each refit")
 parser.add_argument("--annual-scratch", action="store_true",
                     help="With --warm-start: hybrid schedule — retrain from scratch at "
-                         "January refits, fine-tune at Apr/Jul/Oct")
+                         "January refits, fine-tune at all other refits")
 parser.add_argument("--save-seeds-dir", default=None,
                     help="If set, write each seed's predictions to DIR/seed{S}.parquet "
                          "(needed for the DM protocol and ensemble-size curve)")

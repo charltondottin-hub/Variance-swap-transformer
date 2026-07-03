@@ -60,7 +60,7 @@ def walk_forward_transformer(
         is_last = i == n_segments - 1
 
         # Hybrid schedule: January refits retrain from scratch (re-anchors seed
-        # diversity, caps warm-start chain drift at 3 quarters); other quarters
+        # diversity, caps warm-start chain drift at one year); all other refits
         # fine-tune the previous segment's weights.
         use_warm = (warm_start and prev_state is not None
                     and not (scratch_at_year_start and fit_cutoff.month == 1))
