@@ -1,4 +1,6 @@
 """Walk-forward training and prediction for the transformer."""
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 import torch
@@ -19,11 +21,24 @@ def walk_forward_transformer(
     window_config: WindowConfig = None,
     train_config: TrainConfig = None,
     model_kwargs: dict = None,
+    warm_start: bool = False,
+    scratch_at_year_start: bool = False,
+    finetune_config: TrainConfig = None,
 ) -> pd.DataFrame:
     window_config = window_config or WindowConfig()
     train_config = train_config or TrainConfig()
     model_kwargs = model_kwargs or {"d_model": 64, "n_heads": 4, "n_layers": 2}
     seq_len = window_config.seq_len
+
+    # Warm-started weights need only a few gentle steps (and no warmup, which
+    # exists to protect random init from early large gradients).
+    if warm_start and finetune_config is None:
+        finetune_config = replace(
+            train_config,
+            epochs=5,
+            lr=train_config.lr / 5,
+            warmup_steps=0,
+        )
 
     test_start_ts = pd.Timestamp(test_start)
     test_end_ts = pd.Timestamp(test_end)
@@ -36,13 +51,21 @@ def walk_forward_transformer(
 
     all_preds = []
     all_actuals = []
+    prev_state = None
 
     n_segments = len(refit_dates) - 1
     for i in range(n_segments):
         fit_cutoff = refit_dates[i]
         next_cutoff = refit_dates[i + 1]
         is_last = i == n_segments - 1
-        print(f"\n=== Refit at {fit_cutoff.date()}, predicting through {next_cutoff.date()}")
+
+        # Hybrid schedule: January refits retrain from scratch (re-anchors seed
+        # diversity, caps warm-start chain drift at 3 quarters); other quarters
+        # fine-tune the previous segment's weights.
+        use_warm = (warm_start and prev_state is not None
+                    and not (scratch_at_year_start and fit_cutoff.month == 1))
+        mode = "fine-tune" if use_warm else "scratch"
+        print(f"\n=== Refit at {fit_cutoff.date()} ({mode}), predicting through {next_cutoff.date()}")
 
         # Drop the last `horizon` rows so no training target uses returns from
         # after fit_cutoff (target[t] = sum r^2 from t+1..t+horizon, so target[t]
@@ -65,7 +88,15 @@ def walk_forward_transformer(
         val_ds = RVDataset(scaled.iloc[val_start:n], train_target, window_config)
 
         model = RVTransformer(n_features=features.shape[1], **model_kwargs)
-        model, _ = train_model(model, train_ds, val_ds, train_config)
+        if use_warm:
+            model.load_state_dict(prev_state)
+            model, _ = train_model(model, train_ds, val_ds, finetune_config,
+                                   init_as_baseline=True)
+        else:
+            model, _ = train_model(model, train_ds, val_ds, train_config)
+
+        if warm_start:
+            prev_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
 
         # Test slice: include seq_len-1 rows of pre-context so the first day
         # of the segment gets a prediction (otherwise we silently lose ~seq_len
