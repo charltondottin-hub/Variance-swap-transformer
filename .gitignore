@@ -8,6 +8,7 @@ venv/
 
 # Data caches and outputs
 data/cache/
+data/raw/
 *.parquet
 *.csv
 !data/sample/*.csv
@@ -22,3 +23,6 @@ models/checkpoints/*.pt
 # Notebooks
 .ipynb_checkpoints/
 .env
+
+# Personal docs
+*.docx
