@@ -31,18 +31,32 @@ def train_model(
     train_ds: Dataset,
     val_ds: Dataset,
     config: TrainConfig,
+    init_as_baseline: bool = False,
 ):
     device = torch.device(config.device)
     model = model.to(device)
- 
+
     train_loader = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config.batch_size, shuffle=False)
- 
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     total_steps = config.epochs * len(train_loader)
- 
+
     best_val = float("inf")
     best_state = None
+
+    # For warm-started models the incoming weights are a real candidate — if no
+    # fine-tune epoch beats them on val, they are returned unchanged.
+    if init_as_baseline:
+        model.eval()
+        with torch.no_grad():
+            init_losses = [
+                qlike_loss_log(model(x.to(device)), y.to(device)).item()
+                for x, y in val_loader
+            ]
+        best_val = sum(init_losses) / max(1, len(init_losses))
+        best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+        print(f"Warm-start baseline | val {best_val:.5f}")
     bad_epochs = 0
     history = {"train_loss": [], "val_loss": []}
     step = 0

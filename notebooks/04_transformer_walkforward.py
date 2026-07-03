@@ -30,6 +30,16 @@ parser.add_argument("--config", default=str(root / "results" / "best_transformer
 parser.add_argument("--n-seeds", type=int, default=10,
                     help="Number of random seeds to train and average in level space "
                          "(in-memory deep ensemble). Smoke runs always use 1.")
+parser.add_argument("--refit-freq", default="YS",
+                    help="Pandas offset alias for refits: YS annual, QS quarterly, MS monthly")
+parser.add_argument("--warm-start", action="store_true",
+                    help="Fine-tune previous segment's weights (~5 epochs, lr/5) instead of "
+                         "retraining from scratch at each refit")
+parser.add_argument("--save-seeds-dir", default=None,
+                    help="If set, write each seed's predictions to DIR/seed{S}.parquet "
+                         "(needed for the DM protocol and ensemble-size curve)")
+parser.add_argument("--out", default=None,
+                    help="Override output parquet path (use a distinct name for experiments)")
 args = parser.parse_args()
 
 # Load tuned hyperparameters if present, else fall back to library defaults.
@@ -66,8 +76,12 @@ else:
                             weight_decay=tuned.get("weight_decay", 1e-4))
     out_path = root / "results" / "transformer_predictions.parquet"
 
+if args.out:
+    out_path = pathlib.Path(args.out)
+
 print(f"Features: {features.shape}, range {features.index[0].date()}..{features.index[-1].date()}")
 print(f"Test window: {test_start} .. {test_end}  (smoke={args.smoke})")
+print(f"Refits: {args.refit_freq}  warm_start={args.warm_start}")
 print(f"Model kwargs: {model_kwargs}  seq_len={window_cfg.seq_len}")
 
 # Smoke runs use a single seed for speed; production ensembles n_seeds.
@@ -87,14 +101,20 @@ for seed in range(n_seeds):
             features, target,
             test_start=test_start,
             test_end=test_end,
+            refit_freq=args.refit_freq,
             window_config=window_cfg,
             train_config=train_cfg,
             model_kwargs=model_kwargs,
+            warm_start=args.warm_start,
         )
     seed_preds.append(res["predicted"].rename(f"seed{seed}"))
     if actual is None:
         actual = res["actual"]
     print(f"    seed {seed}: QLIKE {qlike(res['actual'], res['predicted']):.6f}")
+    if args.save_seeds_dir:
+        seed_dir = pathlib.Path(args.save_seeds_dir)
+        seed_dir.mkdir(parents=True, exist_ok=True)
+        res.to_parquet(seed_dir / f"seed{seed}.parquet")
 
 # Deep ensemble: average the seeds' predictions per date in level space (the space
 # QLIKE/MSE score), then score the averaged series once.
