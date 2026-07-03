@@ -22,6 +22,7 @@ def walk_forward_transformer(
     train_config: TrainConfig = None,
     model_kwargs: dict = None,
     warm_start: bool = False,
+    scratch_at_year_start: bool = False,
     finetune_config: TrainConfig = None,
 ) -> pd.DataFrame:
     window_config = window_config or WindowConfig()
@@ -57,7 +58,14 @@ def walk_forward_transformer(
         fit_cutoff = refit_dates[i]
         next_cutoff = refit_dates[i + 1]
         is_last = i == n_segments - 1
-        print(f"\n=== Refit at {fit_cutoff.date()}, predicting through {next_cutoff.date()}")
+
+        # Hybrid schedule: January refits retrain from scratch (re-anchors seed
+        # diversity, caps warm-start chain drift at 3 quarters); other quarters
+        # fine-tune the previous segment's weights.
+        use_warm = (warm_start and prev_state is not None
+                    and not (scratch_at_year_start and fit_cutoff.month == 1))
+        mode = "fine-tune" if use_warm else "scratch"
+        print(f"\n=== Refit at {fit_cutoff.date()} ({mode}), predicting through {next_cutoff.date()}")
 
         # Drop the last `horizon` rows so no training target uses returns from
         # after fit_cutoff (target[t] = sum r^2 from t+1..t+horizon, so target[t]
@@ -80,7 +88,7 @@ def walk_forward_transformer(
         val_ds = RVDataset(scaled.iloc[val_start:n], train_target, window_config)
 
         model = RVTransformer(n_features=features.shape[1], **model_kwargs)
-        if warm_start and prev_state is not None:
+        if use_warm:
             model.load_state_dict(prev_state)
             model, _ = train_model(model, train_ds, val_ds, finetune_config,
                                    init_as_baseline=True)

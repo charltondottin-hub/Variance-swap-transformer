@@ -35,6 +35,9 @@ parser.add_argument("--refit-freq", default="YS",
 parser.add_argument("--warm-start", action="store_true",
                     help="Fine-tune previous segment's weights (~5 epochs, lr/5) instead of "
                          "retraining from scratch at each refit")
+parser.add_argument("--annual-scratch", action="store_true",
+                    help="With --warm-start: hybrid schedule — retrain from scratch at "
+                         "January refits, fine-tune at Apr/Jul/Oct")
 parser.add_argument("--save-seeds-dir", default=None,
                     help="If set, write each seed's predictions to DIR/seed{S}.parquet "
                          "(needed for the DM protocol and ensemble-size curve)")
@@ -81,7 +84,7 @@ if args.out:
 
 print(f"Features: {features.shape}, range {features.index[0].date()}..{features.index[-1].date()}")
 print(f"Test window: {test_start} .. {test_end}  (smoke={args.smoke})")
-print(f"Refits: {args.refit_freq}  warm_start={args.warm_start}")
+print(f"Refits: {args.refit_freq}  warm_start={args.warm_start}  annual_scratch={args.annual_scratch}")
 print(f"Model kwargs: {model_kwargs}  seq_len={window_cfg.seq_len}")
 
 # Smoke runs use a single seed for speed; production ensembles n_seeds.
@@ -106,6 +109,7 @@ for seed in range(n_seeds):
             train_config=train_cfg,
             model_kwargs=model_kwargs,
             warm_start=args.warm_start,
+            scratch_at_year_start=args.annual_scratch,
         )
     seed_preds.append(res["predicted"].rename(f"seed{seed}"))
     if actual is None:
