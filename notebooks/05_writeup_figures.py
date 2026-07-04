@@ -46,6 +46,32 @@ def plot_actual_vs_model_recent_5y(pred_file, model_label, color, out_name):
     plt.close(fig)
 
 
+def plot_actual_vs_model_range(pred_file, model_label, color, start, end,
+                               out_name):
+    """Actual vs model predictions over an explicit date range.
+
+    Same alignment convention as the 5-year plot: the actual series is
+    shifted forward 21 trading days so both lines move at the same time.
+    """
+    df = pd.read_parquet(RESULTS / pred_file)
+    df["actual"] = df["actual"].shift(21)  # timestamp at window end
+    df = df.loc[(df.index >= start) & (df.index <= end)]
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    ax.plot(df.index, df["actual"], label="Actual (realized)", color="black",
+            linewidth=1.0)
+    ax.plot(df.index, df["predicted"], label=model_label, color=color,
+            linewidth=1.0, alpha=0.85)
+    ax.set_ylabel("21-day forward realized variance")
+    span = f"{df.index.min().year}–{df.index.max().year}"
+    ax.set_title(f"Actual vs {model_label} Predictions ({span})")
+    ax.legend()
+    ax.margins(x=0.01)
+    fig.tight_layout()
+    fig.savefig(FIGURES / out_name, dpi=150)
+    plt.close(fig)
+
+
 def plot_transformer_vs_garch_recent_5y():
     """Transformer vs GARCH predictions overlaid, most recent 5 years."""
     tf = pd.read_parquet(RESULTS / "transformer_predictions.parquet")
@@ -126,6 +152,14 @@ if __name__ == "__main__":
     plot_actual_vs_model_recent_5y(
         "garch_predictions.parquet", "GARCH", "tab:orange",
         "actual_vs_garch_5y.png",
+    )
+    plot_actual_vs_model_range(
+        "transformer_predictions.parquet", "Transformer", "tab:blue",
+        "2014-01-01", "2019-12-31", "actual_vs_transformer_2014_2019.png",
+    )
+    plot_actual_vs_model_range(
+        "transformer_predictions.parquet", "Transformer", "tab:blue",
+        "2021-01-01", "2100-01-01", "actual_vs_transformer_2021_present.png",
     )
     plot_transformer_vs_garch_recent_5y()
     best_years = transformer_best_years_qlike()
