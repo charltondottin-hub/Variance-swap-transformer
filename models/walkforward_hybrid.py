@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 
 from models.dataset import WindowConfig, FeatureScaler
 from models.hybrid_dataset import SurfaceRVDataset, SurfaceScaler
-from models.surface_cnn import SurfaceRVTransformer
+from models.surface_cnn import SurfaceRVTransformer, GatedSurfaceRVTransformer
 from models.train import TrainConfig
 from models.train_hybrid import train_model, _to
 
@@ -37,6 +37,11 @@ def walk_forward_surface_cnn(
     warm_start: bool = False,
     scratch_at_year_start: bool = False,
     finetune_config: TrainConfig = None,
+    gated: bool = False,             # GatedSurfaceRVTransformer (iteration 2)
+    embargo: int = 0,                # rows skipped between train and val
+                                     # targets; >= horizon purges the overlap
+                                     # that let persistent surface patterns
+                                     # pass validation (2026-07-13 diagnosis)
 ) -> pd.DataFrame:
     window_config = window_config or WindowConfig()
     train_config = train_config or TrainConfig()
@@ -71,7 +76,7 @@ def walk_forward_surface_cnn(
 
         n = len(train_features)
         val_n = max(seq_len * 2, int(n * val_frac))
-        train_n = n - val_n
+        train_n = n - val_n - embargo
 
         f_scaler = FeatureScaler().fit(train_features.iloc[:train_n])
         s_scaler = SurfaceScaler().fit(
@@ -79,7 +84,9 @@ def walk_forward_surface_cnn(
         scaled = f_scaler.transform(features)
         s_scaled = s_scaler.transform(surface)
 
-        val_start = max(0, train_n - (seq_len - 1))
+        # first val target lands at row train_n + embargo; the back-extension
+        # only supplies feature pre-context, never targets
+        val_start = max(0, train_n + embargo - (seq_len - 1))
         train_ds = SurfaceRVDataset(scaled.iloc[:train_n],
                                     s_scaled.iloc[:train_n],
                                     train_target, window_config)
@@ -87,9 +94,10 @@ def walk_forward_surface_cnn(
                                   s_scaled.iloc[val_start:n],
                                   train_target, window_config)
 
-        model = SurfaceRVTransformer(n_base=features.shape[1],
-                                     channels=channels, d_embed=d_embed,
-                                     **model_kwargs)
+        model_cls = GatedSurfaceRVTransformer if gated else SurfaceRVTransformer
+        model = model_cls(n_base=features.shape[1],
+                          channels=channels, d_embed=d_embed,
+                          **model_kwargs)
         if use_warm:
             model.load_state_dict(prev_state)
             model, _ = train_model(model, train_ds, val_ds, finetune_config,

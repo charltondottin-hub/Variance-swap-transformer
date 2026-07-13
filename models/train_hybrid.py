@@ -32,6 +32,10 @@ def train_model(model: nn.Module, train_ds: Dataset, val_ds: Dataset,
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr,
                                   weight_decay=config.weight_decay)
     total_steps = config.epochs * len(train_loader)
+    # Early surface segments have fewer total steps than the production
+    # warmup (segment 1: 150 < 200), so the LR never finished ramping and
+    # the cosine phase never ran. Cap warmup at 20% of the run.
+    warmup_steps = min(config.warmup_steps, max(1, total_steps // 5))
 
     best_val = float("inf")
     best_state = None
@@ -53,7 +57,7 @@ def train_model(model: nn.Module, train_ds: Dataset, val_ds: Dataset,
         for x, y in train_loader:
             x, y = _to(x, device), y.to(device)
 
-            lr_mult = warmup_cosine_schedule(step, config.warmup_steps,
+            lr_mult = warmup_cosine_schedule(step, warmup_steps,
                                              total_steps)
             for g in optimizer.param_groups:
                 g["lr"] = config.lr * lr_mult

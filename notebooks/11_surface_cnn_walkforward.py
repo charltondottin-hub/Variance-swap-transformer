@@ -44,6 +44,13 @@ parser.add_argument("--annual-scratch", action="store_true")
 parser.add_argument("--channels", default="16,32,64",
                     help="encoder filter ladder, e.g. 16,32 or 16,32,64,128")
 parser.add_argument("--d-embed", type=int, default=16)
+parser.add_argument("--gated", action="store_true",
+                    help="iteration-2 GatedSurfaceRVTransformer "
+                         "(GroupNorm + LayerNorm + zero-init gate); "
+                         "pair with --channels 8,16 --d-embed 4")
+parser.add_argument("--embargo", type=int, default=0,
+                    help="rows purged between train and val targets "
+                         "(>= 21 removes forward-RV overlap)")
 parser.add_argument("--save-seeds-dir", default=None)
 parser.add_argument("--out",
                     default=str(root / "results"
@@ -99,6 +106,7 @@ for seed in range(args.seed_start, args.seed_start + n_seeds):
             channels=channels, d_embed=args.d_embed,
             warm_start=args.warm_start,
             scratch_at_year_start=args.annual_scratch,
+            gated=args.gated, embargo=args.embargo,
         )
     seed_preds.append(res["predicted"].rename(f"seed{seed}"))
     if actual is None:
